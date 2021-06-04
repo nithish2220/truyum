@@ -1,0 +1,36 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2 &
+    runtime-versions:
+      docker: 18
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - REPOSITORY_URI=516406820790.dkr.ecr.us-east-2.amazonaws.com/truyum-service-registry
+  #Completar con uri de ecr repo (output de tf en tf-base-repos)
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo building java
+      - cd truyum
+      - echo Building the Docker image...
+      #- docker build -t $REPOSITORY_URI:latest .                     # se reemplaza por build de jib
+      - mvn compile jib:build -Dimage=$REPOSITORY_URI:latest          # TODO: Probar multiple tags utilizando el to.tags en los parámetros (https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html)
+      - mvn package
+      #- docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - echo building the docker image...
+      - docker build -t service/truyum .
+      - docker tag service/truyum
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      #- echo Pushing the Docker images...                            # el jib build realiza el push también
+      #- docker push $REPOSITORY_URI:latest
+      #- docker push $REPOSITORY_URI:$IMAGE_TAG
